@@ -11,14 +11,14 @@ import tensorflow as tf
 import re
 import os
 character_dict = dict()
-batch_size = 128
+
 def getTextBatch(text_list):
     ind = np.random.randint(0,len(text_list))
     text = text_list[ind]
     text = re.sub(r'[^a-zA-Z0-9 ]','',str(text).replace('-',' '))
-    if len(text)>13:
-        snippet_ind = np.random.randint(0,max(len(text)-11,1))
-        snippet = text[snippet_ind:snippet_ind+11]
+    if len(text)>23:
+        snippet_ind = np.random.randint(0,max(len(text)-21,1))
+        snippet = text[snippet_ind:snippet_ind+21]
         return snippet
     else:
         return getTextBatch(text_list)
@@ -28,7 +28,7 @@ def setUpText():
     return text_list
 
 def textToInt(snippet,character_dict):
-    need_to_add = list(set([x for x in snippet if x not in list(character_dict.keys())]))
+    need_to_add = sorted(list(set([x for x in snippet if x not in list(character_dict.keys())])))
     current_ind = len(character_dict.values())
     for i in range(0,len(need_to_add)):
         character_dict[need_to_add[i]] = current_ind
@@ -36,8 +36,8 @@ def textToInt(snippet,character_dict):
     return [character_dict[x] for x in snippet]
 
 
-def buildModel(batch_size):
-  rnn_units = 256
+def buildModel(batch_size,character_dict):
+  rnn_units = 1024
   vocab_size = len(character_dict.values())
   model = tf.keras.Sequential([    
     tf.keras.layers.Embedding(vocab_size+1, 256,
@@ -51,7 +51,7 @@ def buildModel(batch_size):
   return model
 def loss(labels, logits):
   return tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
-def trainModel(batch_size,model,text_list,save_callback,character_dict):
+def trainModel(batch_size,model,text_list,character_dict):
     to_pass_x = []
     to_pass_y = []
     for i in range(0,batch_size):
@@ -64,7 +64,7 @@ def trainModel(batch_size,model,text_list,save_callback,character_dict):
     
     x = np.array(to_pass_x)
     y = np.array(to_pass_y)
-    model.fit(x=x,y=y,callbacks=[save_callback],epochs=1)
+    model.fit(x=x,y=y)
     return model
 def addToDict(character_dict):
     text_list = setUpText()
@@ -75,11 +75,11 @@ def addToDict(character_dict):
     textToInt(all_char,character_dict)
     return character_dict
 def runModel(character_dict):
-
+    batch_size = 128
     epochs = 10000
     character_dict = addToDict(character_dict)
     text_list = setUpText()
-    model = buildModel(batch_size)
+    model = buildModel(batch_size,character_dict)
     save_folder = './NN_Saves'
     try:
         model.load_weights(tf.train.latest_checkpoint(save_folder))
@@ -90,32 +90,35 @@ def runModel(character_dict):
     model.compile(optimizer='adam', loss=loss)
     
 
-    save = os.path.join(save_folder, "NN_Save_{loss:.2f}")
+    save = os.path.join(save_folder, "NN_Save")
 
-    save_callback=tf.keras.callbacks.ModelCheckpoint(
-            filepath=save,
-            save_weights_only=True)
+    #save_callback=tf.keras.callbacks.ModelCheckpoint(
+    #        filepath=save,
+   #         save_weights_only=True)
+   # manager = tf.train.CheckpointManager(save_callback, './NN_Saves', max_to_keep=3)
 
     for i in range(epochs):
-        trainModel(batch_size,model,text_list,save_callback,character_dict)
-
+        trainModel(batch_size,model,text_list,character_dict)
+        if i%200==0:
+            model.save_weights(save)
 def generatePrediction(size,start_text):
+    size = int(size)
     character_dict = addToDict(dict())
-    model = buildModel(1)
+    model = buildModel(1,character_dict)
     save_folder = './NN_Saves'
     model.load_weights(tf.train.latest_checkpoint(save_folder))
 
     model.build(tf.TensorShape([1, None]))
     pred_text = []
     for i in range(size):
-        x = textToInt(start_text[-10:],character_dict)
+        x = textToInt(start_text[-21:],character_dict)
         predictions = model.predict(np.array([x]))
         predicted_id = tf.random.categorical(predictions[0], num_samples=1)[-1,0]
-        with tf.compat.v1.Session() as sess:  predicted_id = predicted_id.eval()
+        predicted_id = predicted_id.numpy()
         char = list(character_dict.keys())[predicted_id]
         pred_text.append(char)
         start_text = start_text+char
-    return start_text+''.join(pred_text)
+    return start_text
 
 if __name__=='__main__':
     runModel(character_dict)

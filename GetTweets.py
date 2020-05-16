@@ -23,6 +23,8 @@ def extractTweet(tweet):
         tweet = tweet.split('Embed Tweet')[-1]
     tweet = tweet.lstrip('\n').rstrip('\n').lstrip(' ').rstrip(' ')
     re.sub(r'[^a-zA-Z0-9 ]','',tweet.replace('-',' '))
+    if 'Follow' in tweet or 'Unfollow' in tweet:
+        return ''
     return tweet
 def extractAccount(tweet):
     tweet = tweet.split('@')[1].strip(' ')
@@ -37,14 +39,24 @@ def extractAccount(tweet):
 #        tweet = tweet.split('http')[0]
     return tweet
 def extractReply(tweet):
+    output_accounts = []
     if len(tweet.split('@'))>2:
-        tweet = tweet.split('@')[2].strip(' ')
-        first_n = tweet.find('\n')
-        if first_n==-1:
-            first_n = len(tweet)
-        tweet = tweet[0:first_n]
-        tweet = tweet.split(' ')[0]
-        tweet = re.sub(r'[^a-zA-Z0-9 ]','',tweet.replace('-',' '))
+        accounts_to_get = tweet.split('@')[2:]
+        for tweet in accounts_to_get:
+            tweet = tweet.strip(' ')
+        
+            first_n = tweet.find('\n')
+            if first_n==-1:
+                first_n = len(tweet)
+            tweet = tweet[0:first_n]
+            tweet = tweet.split(' ')[0]
+            if 'pic.twitter.com' in tweet:
+                tweet = tweet.split('pic.twitter.com')[0]
+            elif 'twitter.com' in tweet:
+                tweet = tweet.split('twitter.com')[0]
+            if 'http' in tweet:
+                tweet = tweet.split('http')[0]
+            tweet = re.sub(r'[^a-zA-Z0-9 ]','',tweet.replace('-',' '))
     #    tweet=tweet.replace('\n','')
     #    if 'pic.twitter.com' in tweet:
     #        tweet = tweet.split('pic.twitter.com')[0]
@@ -52,12 +64,13 @@ def extractReply(tweet):
     #        tweet = tweet.split('twitter.com')[0]
     #    if 'http' in tweet:
     #        tweet = tweet.split('http')[0]
-        return tweet
+            output_accounts.append(tweet)
+        return output_accounts
     else:
         tweet = tweet.split('@')[1].strip(' ')
         first_n = tweet.find('\n')
         tweet = tweet[0:first_n]
-        
+        output_accounts.append(tweet)
     #    tweet=tweet.replace('\n','')
     #    if 'pic.twitter.com' in tweet:
     #        tweet = tweet.split('pic.twitter.com')[0]
@@ -65,7 +78,7 @@ def extractReply(tweet):
     #        tweet = tweet.split('twitter.com')[0]
     #    if 'http' in tweet:
     #        tweet = tweet.split('http')[0]
-        return tweet
+        return output_accounts
 def searchAccounts(account_list,tweet_list,account_set):
     new_accounts = []
     for i in range(0,len(account_list)):
@@ -81,7 +94,7 @@ def searchAccounts(account_list,tweet_list,account_set):
         tweets = soup.findAll('li',{"class":'js-stream-item'})
         for tweet in tweets:
             tweet_list.append(extractTweet(tweet.text))
-            new_accounts.append(extractReply(tweet.text))
+            new_accounts = new_accounts+extractReply(tweet.text)
         if i%100==0:
             print('Saving Tweets')
             pd.DataFrame({'Tweets':tweet_list}).drop_duplicates().to_csv('Tweets.csv')
